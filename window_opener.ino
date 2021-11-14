@@ -107,9 +107,9 @@ unsigned const long wifiCheckInterval = 100000;
 unsigned long wifiCheckLock = 0;
 
 // Stepper config
-const int stepperEnPin = 34;
-const int stepPin = 32;
-const int dirPin = 35;
+const int stepperEnPin = 13;
+const int stepPin = 12;
+const int dirPin = 14;
 
 int stepperState = LOW;
 int pos = 0;
@@ -117,7 +117,7 @@ int pos = 0;
 const int stepDelayMs = 500;
 const int fullCyclePulses = 200;
 float motorMaxSpeed = 1000.0;
-float motorSpeed = 100.0;
+float motorSpeed = 1000.0;
 float motorAccel = 5000.0;
 
 long stepperMaxPos = 0;
@@ -189,6 +189,7 @@ CircularBuffer <Task, taskLimit> tasks;
 // Setup
 void setup() {
   Serial.begin(9600);
+  stepperOff();
   setupDisplay();
   
   displayStatus("Restoring from EEPROM...");
@@ -504,10 +505,11 @@ bool isIdle() {
   }
 
 void checkLimits() {
-  int currentPos = stepper.getCurrentPositionInSteps();
-  int targetPos = stepper.getTargetPositionInSteps();
+  long currentPos = stepper.getCurrentPositionInSteps();
+  long targetPos = stepper.getTargetPositionInSteps();
   
   if ((currentPos == stepperMaxPos && digitalRead(topLimitPin) && targetPos > currentPos) || (currentPos == 0 && digitalRead(bottomLimitPin) && targetPos < currentPos)) {
+    Serial.println("LimitHit");
     stepper.setCurrentPositionInSteps(currentPos);
     stepper.setTargetPositionInSteps(currentPos);
     delay(200);
@@ -523,15 +525,14 @@ void runStepper() {
   if (stepper.getDistanceToTargetSigned() != 0) {
   if (stepperState == LOW) {
       stepperOn();
-      delay(1000);
+      delay(500);
     }
   
   if (topHoming) {
     if (digitalRead(topLimitPin) == HIGH) {
       topHoming = false;
       stepperMaxPos = stepper.getCurrentPositionInSteps();
-      stepper.setCurrentPositionInSteps(stepperMaxPos);
-      stepper.setTargetPositionInSteps(stepperMaxPos);
+      stepper.hardStop();
      
       return;
       }
@@ -539,6 +540,7 @@ void runStepper() {
 
   if (bottomHoming) {
     if (digitalRead(bottomLimitPin) == HIGH) {
+      Serial.println("Stop bottom!");
       stepper.setCurrentPositionAsHomeAndStop();
       bottomHoming = false;
       runHoming = true;
@@ -736,8 +738,7 @@ void loop() {
 //  checkLeds();
   checkStepper();
   checkHoming();
-  checkWifi();
+//  checkWifi();
   performTasks();
   runStepper();
-  displayStatus();
 }
