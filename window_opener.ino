@@ -1,7 +1,8 @@
+#include <Arduino.h>
+
 #include "ESPAsyncWebServer.h"
 #include "CircularBuffer.h"
 #include "ESP_FlexyStepper.h"
-
 #include "EEPROM.h"
 #include "Regexp.h"
 #include "Wire.h"
@@ -13,93 +14,93 @@
 #include "Adafruit_GFX.h"
 #include "Adafruit_SSD1306.h"
 
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_WIDTH 128    // OLED display width, in pixels
+#define SCREEN_HEIGHT 64    // OLED display height, in pixels
+#define OLED_RESET 4        // Reset pin # (or -1 if sharing Arduino reset pin)
 #define SCREEN_ADDRESS 0x3C /// < See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 
-#define LOGO_HEIGHT   64
-#define LOGO_WIDTH    128
+#define LOGO_HEIGHT 64
+#define LOGO_WIDTH 128
 // 'logov1', 128x64px
-const unsigned char logov1 [] PROGMEM = {
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-  0x3f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfc, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x03, 0x06, 0x0c, 0xc0, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x03, 0x06, 0x0c, 0xc0, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x01, 0x87, 0x18, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x01, 0x8f, 0x18, 0xcd, 0xe0, 0x7f, 0x1f, 0x0c, 0x63, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x01, 0x8b, 0x18, 0xcf, 0xf0, 0xff, 0x3f, 0x8c, 0x63, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x01, 0x89, 0x18, 0xce, 0x38, 0xc3, 0x71, 0xc4, 0x62, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0xc9, 0xb0, 0xcc, 0x19, 0x83, 0x60, 0xc6, 0xf6, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0xd9, 0xb0, 0xcc, 0x19, 0x83, 0x60, 0xc6, 0x96, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0xd9, 0xb0, 0xcc, 0x19, 0x83, 0x60, 0xc6, 0x96, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0xd0, 0xb0, 0xcc, 0x19, 0x83, 0x60, 0xc2, 0x9c, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x70, 0xe0, 0xcc, 0x19, 0xc3, 0x71, 0xc3, 0x0c, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x70, 0xe0, 0xcc, 0x18, 0xff, 0x3f, 0x83, 0x0c, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x70, 0xe0, 0xcc, 0x18, 0x7b, 0x1f, 0x03, 0x0c, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x01, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x03, 0xc0, 0x04, 
-  0x20, 0x03, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x07, 0xe0, 0x04, 
-  0x20, 0x07, 0x1c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x06, 0x60, 0x04, 
-  0x20, 0x0e, 0x0e, 0xde, 0x07, 0x86, 0xf0, 0x3c, 0x36, 0x00, 0xc3, 0x0f, 0x00, 0x0c, 0x30, 0x04, 
-  0x20, 0x0c, 0x06, 0xff, 0x0f, 0xc7, 0xf8, 0x7e, 0x3e, 0x00, 0xe7, 0x03, 0x00, 0x0c, 0x30, 0x04, 
-  0x20, 0x0c, 0x06, 0xe3, 0x98, 0x67, 0x1c, 0xc3, 0x38, 0x00, 0x66, 0x03, 0x00, 0x0c, 0x30, 0x04, 
-  0x20, 0x0c, 0x06, 0xc1, 0x9f, 0xe6, 0x0c, 0xff, 0x30, 0x00, 0x66, 0x03, 0x00, 0x0c, 0x30, 0x04, 
-  0x20, 0x0c, 0x06, 0xc1, 0x9f, 0xe6, 0x0c, 0xff, 0x30, 0x00, 0x66, 0x03, 0x00, 0x0c, 0x30, 0x04, 
-  0x20, 0x0c, 0x06, 0xc1, 0x98, 0x06, 0x0c, 0xc0, 0x30, 0x00, 0x3c, 0x03, 0x00, 0x0c, 0x30, 0x04, 
-  0x20, 0x0e, 0x0e, 0xc1, 0x98, 0x06, 0x0c, 0xc0, 0x30, 0x00, 0x3c, 0x03, 0x00, 0x0c, 0x30, 0x04, 
-  0x20, 0x07, 0x1c, 0xc3, 0x1c, 0x26, 0x0c, 0xe1, 0x30, 0x00, 0x3c, 0x03, 0x01, 0x86, 0x60, 0x04, 
-  0x20, 0x03, 0xf8, 0xff, 0x0f, 0xe6, 0x0c, 0x7f, 0x30, 0x00, 0x18, 0x0f, 0xc1, 0x87, 0xe0, 0x04, 
-  0x20, 0x01, 0xf0, 0xfe, 0x07, 0xc6, 0x0c, 0x3e, 0x30, 0x00, 0x18, 0x0f, 0xc1, 0x83, 0xc0, 0x04, 
-  0x20, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-  0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-  0x20, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0xe4, 0x02, 0x00, 0x0f, 0x40, 0x00, 0x00, 0x04, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x10, 0x02, 0x00, 0x10, 0x40, 0x00, 0x00, 0x00, 0x04, 
-  0x20, 0x00, 0x00, 0x00, 0x01, 0xe4, 0x41, 0x14, 0x73, 0x28, 0x20, 0x78, 0xa8, 0x9c, 0xe4, 0xc4, 
-  0x20, 0x00, 0x00, 0x00, 0x01, 0x12, 0x81, 0x14, 0x8a, 0x30, 0x20, 0x44, 0xc8, 0x91, 0x05, 0x24, 
-  0x3f, 0xff, 0xff, 0xff, 0xf1, 0x12, 0x81, 0xe4, 0x8a, 0x20, 0x20, 0x44, 0x88, 0x89, 0x05, 0xe4, 
-  0x00, 0x00, 0x00, 0x00, 0x01, 0x12, 0x81, 0x04, 0x8a, 0x20, 0x10, 0x44, 0x88, 0x85, 0x05, 0x04, 
-  0x00, 0x00, 0x00, 0x00, 0x01, 0xe1, 0x01, 0x04, 0x71, 0x20, 0x0f, 0x44, 0x87, 0x9c, 0xe4, 0xe4, 
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
+const unsigned char logov1[] PROGMEM = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x3f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfc,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x03, 0x06, 0x0c, 0xc0, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x03, 0x06, 0x0c, 0xc0, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x01, 0x87, 0x18, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x01, 0x8f, 0x18, 0xcd, 0xe0, 0x7f, 0x1f, 0x0c, 0x63, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x01, 0x8b, 0x18, 0xcf, 0xf0, 0xff, 0x3f, 0x8c, 0x63, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x01, 0x89, 0x18, 0xce, 0x38, 0xc3, 0x71, 0xc4, 0x62, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0xc9, 0xb0, 0xcc, 0x19, 0x83, 0x60, 0xc6, 0xf6, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0xd9, 0xb0, 0xcc, 0x19, 0x83, 0x60, 0xc6, 0x96, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0xd9, 0xb0, 0xcc, 0x19, 0x83, 0x60, 0xc6, 0x96, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0xd0, 0xb0, 0xcc, 0x19, 0x83, 0x60, 0xc2, 0x9c, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x70, 0xe0, 0xcc, 0x19, 0xc3, 0x71, 0xc3, 0x0c, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x70, 0xe0, 0xcc, 0x18, 0xff, 0x3f, 0x83, 0x0c, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x70, 0xe0, 0xcc, 0x18, 0x7b, 0x1f, 0x03, 0x0c, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x01, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x03, 0xc0, 0x04,
+    0x20, 0x03, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x07, 0xe0, 0x04,
+    0x20, 0x07, 0x1c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x06, 0x60, 0x04,
+    0x20, 0x0e, 0x0e, 0xde, 0x07, 0x86, 0xf0, 0x3c, 0x36, 0x00, 0xc3, 0x0f, 0x00, 0x0c, 0x30, 0x04,
+    0x20, 0x0c, 0x06, 0xff, 0x0f, 0xc7, 0xf8, 0x7e, 0x3e, 0x00, 0xe7, 0x03, 0x00, 0x0c, 0x30, 0x04,
+    0x20, 0x0c, 0x06, 0xe3, 0x98, 0x67, 0x1c, 0xc3, 0x38, 0x00, 0x66, 0x03, 0x00, 0x0c, 0x30, 0x04,
+    0x20, 0x0c, 0x06, 0xc1, 0x9f, 0xe6, 0x0c, 0xff, 0x30, 0x00, 0x66, 0x03, 0x00, 0x0c, 0x30, 0x04,
+    0x20, 0x0c, 0x06, 0xc1, 0x9f, 0xe6, 0x0c, 0xff, 0x30, 0x00, 0x66, 0x03, 0x00, 0x0c, 0x30, 0x04,
+    0x20, 0x0c, 0x06, 0xc1, 0x98, 0x06, 0x0c, 0xc0, 0x30, 0x00, 0x3c, 0x03, 0x00, 0x0c, 0x30, 0x04,
+    0x20, 0x0e, 0x0e, 0xc1, 0x98, 0x06, 0x0c, 0xc0, 0x30, 0x00, 0x3c, 0x03, 0x00, 0x0c, 0x30, 0x04,
+    0x20, 0x07, 0x1c, 0xc3, 0x1c, 0x26, 0x0c, 0xe1, 0x30, 0x00, 0x3c, 0x03, 0x01, 0x86, 0x60, 0x04,
+    0x20, 0x03, 0xf8, 0xff, 0x0f, 0xe6, 0x0c, 0x7f, 0x30, 0x00, 0x18, 0x0f, 0xc1, 0x87, 0xe0, 0x04,
+    0x20, 0x01, 0xf0, 0xfe, 0x07, 0xc6, 0x0c, 0x3e, 0x30, 0x00, 0x18, 0x0f, 0xc1, 0x83, 0xc0, 0x04,
+    0x20, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x20, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0xe4, 0x02, 0x00, 0x0f, 0x40, 0x00, 0x00, 0x04, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x10, 0x02, 0x00, 0x10, 0x40, 0x00, 0x00, 0x00, 0x04,
+    0x20, 0x00, 0x00, 0x00, 0x01, 0xe4, 0x41, 0x14, 0x73, 0x28, 0x20, 0x78, 0xa8, 0x9c, 0xe4, 0xc4,
+    0x20, 0x00, 0x00, 0x00, 0x01, 0x12, 0x81, 0x14, 0x8a, 0x30, 0x20, 0x44, 0xc8, 0x91, 0x05, 0x24,
+    0x3f, 0xff, 0xff, 0xff, 0xf1, 0x12, 0x81, 0xe4, 0x8a, 0x20, 0x20, 0x44, 0x88, 0x89, 0x05, 0xe4,
+    0x00, 0x00, 0x00, 0x00, 0x01, 0x12, 0x81, 0x04, 0x8a, 0x20, 0x10, 0x44, 0x88, 0x85, 0x05, 0x04,
+    0x00, 0x00, 0x00, 0x00, 0x01, 0xe1, 0x01, 0x04, 0x71, 0x20, 0x0f, 0x44, 0x87, 0x9c, 0xe4, 0xe4,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 AsyncWebServer server(80);
+AsyncEventSource events("/events"); // event source (Server-Sent events)
 
 // Wifi config
 const int SDCardReaderPin = 5;
-const char* wifiConfigFile = "/wifi.txt";
-const char* wifiConfigFileReplacement = "/wifi_old.txt";
+const char *wifiConfigFile = "/wifi.txt";
+const char *wifiConfigFileReplacement = "/wifi_old.txt";
 
 String fileContents;
 IPAddress localIp;
 
-char wifiSsid [100];
-char wifiPassword [100];
+char wifiSsid[100] = "g25s2";
+char wifiPassword[100] = "komuwdrogetemukielbasa";
 const int ssidEEPROMIndex = 0;
 const int passwordEEPROMIndex = 100;
 
@@ -115,7 +116,7 @@ const int dirPin = 14;
 int stepperState = LOW;
 int pos = 0;
 
-const int stepDelayMs = 500;
+const int stepDelayMs = 100;
 const int fullCyclePulses = 200;
 float motorMaxSpeed = 1000.0;
 float motorSpeed = 1000.0;
@@ -127,32 +128,32 @@ long stepperCurrentPos = 0;
 ESP_FlexyStepper stepper;
 
 // Limit Buttons config
-const int bottomLimitPin = 26;
-const int topLimitPin = 27;
+const int bottomLimitPin = 16;
+const int topLimitPin = 17;
 
-int topLimitState;
-int bottomLimitState;
+int topLimitState = HIGH;
+int bottomLimitState = HIGH;
 
 // Control Buttons config
-const int openButton = 25;
+const int openButton = 32;
 const int closeButton = 33;
-int openButtonState;
-int closeButtonState;
+int openButtonState = HIGH;
+int closeButtonState = HIGH;
 
-const int stepDownButton = 16;
-const int stepUpButton = 17;
-int stepUpButtonState;
-int stepDownButtonState;
+const int stepDownButton = 26;
+const int stepUpButton = 25;
+int stepUpButtonState = HIGH;
+int stepDownButtonState = HIGH;
 const int stepValue = 10;
 
-const int actionButton = 4;
+const int actionButton = 27;
 
-int lastTopLimitState = LOW;
-int lastBottomLimitState = LOW;
+int lastTopLimitState = HIGH;
+int lastBottomLimitState = HIGH;
 
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 150;
-unsigned long lastButtonLockTime = millis();
+unsigned long lastButtonLockTime = 0;
 const unsigned long buttonLockTime = 500;
 
 // Display
@@ -176,7 +177,8 @@ bool locked = false;
 typedef void (*Job)();
 typedef bool (*RunCondition)();
 
-struct Task {
+struct Task
+{
   String name;
   unsigned long dueDate;
   bool finished;
@@ -185,41 +187,81 @@ struct Task {
 };
 
 const int taskLimit = 20;
-CircularBuffer <Task, taskLimit> tasks;
+CircularBuffer<Task, taskLimit> tasks;
 
-// Setup
+void stepperOff();
+void setupDisplay();
+void setupButtons();
+void setupStepper();
+void setupWifi();
+void wifiConnect();
+void setupServer();
+void displayStatus(char *action);
+void stepperOn();
+void stepperOff();
+void addTask(String name, unsigned long dueDate, void job(), bool completionCondition());
+void stepperDir(String dir);
+void checkWifi();
+void startHoming();
+void openTo(int openPercentage);
+long stepperLocationFromOpening(int openPercentage);
+void fullOpen();
+void fullClose();
+void stepUp();
+void stepDown();
+void performTasks();
+void checkButtons();
+void checkButton(int buttonPin, void handler(unsigned long initTime), unsigned long *lastLock, int *buttonState, String message);
+void debugLimits();
+void checkStepper();
+void checkLimits();
+void runStepper();
+void restoreSettingsFromEEPROM();
+void saveSettingsToEEPROM();
+void writeStringToEEPROM(int addrOffset, const String &strToWrite);
+void readStringFromEEPROM(int addrOffset, char (*buf)[100]);
+bool getWifiConfigFromSD();
+bool scanStringAndSetConfig(String content);
+void readFile(fs::FS &fs, const char *path, String *contents);
+void listDir(fs::FS &fs, const char *dirname, uint8_t levels);
+void renameFile(fs::FS &fs, const char *path1, const char *path2);
+void deleteFile(fs::FS &fs, const char *path);
+void checkHoming();
+bool isIdle();
+
 void setup() {
   Serial.begin(9600);
   stepperOff();
   setupDisplay();
-  
-  displayStatus("Restoring from EEPROM...");
-  restoreSettingsFromEEPROM();
-  delay(1000);
-  
+
+  //  displayStatus("Restoring from EEPROM...");
+  //  restoreSettingsFromEEPROM();
+  //  delay(1000);
+
   setupButtons();
-  
+
   displayStatus("Setting up Motor...");
   setupStepper();
   delay(1000);
-  
-  displayStatus("Reading SD...");
-  if (getWifiConfigFromSD()) {
-    saveSettingsToEEPROM();
-  }
-  delay(1000);
+
+  //  displayStatus("Reading SD...");
+  //  if (getWifiConfigFromSD()) {
+  //    saveSettingsToEEPROM();
+  //  }
+  //  delay(1000);
 
   displayStatus("Setting up Wifi...");
   setupWifi();
   delay(1000);
 
-   
-  if (wifiSsid[0] != '\0') {
+  if (wifiSsid[0] != '\0')
+  {
     char wifiText[200] = "Connecting to: ";
-    strcat (wifiText, wifiSsid);
+    strcat(wifiText, wifiSsid);
     displayStatus(wifiText);
     wifiConnect();
     delay(1000);
+    Serial.println(localIp);
   }
 
   displayStatus("Setting up HTTP server...");
@@ -231,71 +273,94 @@ void setup() {
   displayStatus("OK");
 
   unsigned long now = millis();
-  addTask("Start Homing", (now), []() { startHoming(); }, []() { return true; });
-  addTask("Open To 50", (now+1), []() { openTo(50); }, []() { return isIdle(); });
+  addTask(
+      "Start Homing", (now), []()
+      { startHoming(); },
+      []()
+      { return true; });
 }
 
-void setupDisplay() {
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) { 
+void setupDisplay()
+{
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
+  {
     Serial.println(F("SSD1306 allocation failed"));
   }
 
   display.clearDisplay();
-  display.drawBitmap(0, 0,  logov1, LOGO_WIDTH, LOGO_HEIGHT, WHITE);
+  display.drawBitmap(0, 0, logov1, LOGO_WIDTH, LOGO_HEIGHT, WHITE);
 
   display.display();
 
   delay(5000); // Pause for 2 seconds
-  
-  }
+}
 
-void displayStatus(char* action) {
+void displayStatus(char *action)
+{
   display.clearDisplay();
 
-  display.setTextSize(1);             
+  display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
-  display.setCursor(0,0);            
+  display.setCursor(0, 0);
   display.println(localIp);
-  display.setCursor(0,15);         
+  display.setCursor(0, 15);
   display.print("Opened to: ");
   display.print(currentOpenValue);
   display.println("%");
-  if (action != "") {
-    display.setCursor(0,30);         
+  if (action != "")
+  {
+    display.setCursor(0, 30);
     display.println(action);
-    }
-  
+  }
+
   display.display();
 
   lastDisplayUpdate = millis();
-  }  
+}
 
-void setupButtons() {
-  pinMode(openButton, INPUT);
-  pinMode(closeButton, INPUT);
-  pinMode(topLimitPin, INPUT);
-  pinMode(bottomLimitPin, INPUT);
-  }
+void setupButtons()
+{
+  pinMode(openButton, INPUT_PULLUP);
+  pinMode(closeButton, INPUT_PULLUP);
+  pinMode(topLimitPin, INPUT_PULLUP);
+  pinMode(bottomLimitPin, INPUT_PULLUP);
+  pinMode(stepUpButton, INPUT_PULLUP);
+  pinMode(stepDownButton, INPUT_PULLUP);
+  pinMode(actionButton, INPUT_PULLUP);
+}
 
-void setupWifi() {
+void setupWifi()
+{
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   delay(100);
-  }
+}
 
-void setupServer() {
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/plain", "Hello");
-  });
-  server.on("/full_open", HTTP_GET, [](AsyncWebServerRequest *request){
+void onRequest(AsyncWebServerRequest *request)
+{
+  // Handle Unknown Request
+  request->send(404);
+}
+
+void setupServer()
+{
+  server.onNotFound(onRequest);
+
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send_P(200, "text/plain", "Hello"); });
+
+  server.on("/full_open", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
     addTask("API Open", millis(), []() { fullOpen(); }, []() { return isIdle(); });
-    request->send_P(200, "text/plain", "Opening");
-  });
-  server.on("/full_close", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", "Opening"); });
+
+  server.on("/full_close", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
     addTask("API Close", millis(), []() { fullClose(); }, []() { return isIdle(); });
-    request->send_P(200, "text/plain", "Closing");
-  });
-  server.on("open", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    request->send_P(200, "text/plain", "Closing"); });
+
+  server.on("/open", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
       AsyncWebParameter* param = request->getParam(0);
       openValue = param->value().toInt();
 
@@ -304,184 +369,282 @@ void setupServer() {
         request->send_P(200, "text/plain", "Opening to selected value");
         }
       
-      request->send_P(400, "text/plain", "Wrong value");
-  });
+      request->send_P(400, "text/plain", "Wrong value"); });
+
+  server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+    addTask("API Status", millis(), []() { fullClose(); }, []() { return isIdle(); });
+    String response_json = "{\"status\":{\"currentOpenValue\":" + String(currentOpenValue) + "}}";
+    char responseBuff[50];
+    response_json.toCharArray(responseBuff, 50);
+    
+    request->send_P(200, "application/json", responseBuff); });
+
+  server.on("/step_up", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+    addTask("API Step Up", millis(), []() { stepUp(); }, []() { return isIdle(); });
+    
+    request->send_P(200, "text/plain", "Stepping up"); });
+
+  server.on("/step_down", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+    addTask("API Step Down", millis(), []() { stepDown(); }, []() { return isIdle(); });
+    
+    request->send_P(200, "text/plain", "Stepiing down"); });
 
   server.begin();
-  }
+}
 
-void setupStepper() {
+void setupStepper()
+{
   pinMode(stepperEnPin, OUTPUT);
   stepper.connectToPins(stepPin, dirPin);
   delay(500);
   stepper.setSpeedInStepsPerSecond(motorSpeed);
   stepper.setAccelerationInStepsPerSecondPerSecond(motorAccel);
-  }
+  stepper.setDecelerationInStepsPerSecondPerSecond(motorAccel);
+}
 
 // Program
-void stepperOn() {
+void stepperOn()
+{
   stepperState = HIGH;
-  }
+}
 
-void stepperOff() {
+void stepperOff()
+{
   stepperState = LOW;
-  }
+}
 
-void addTask(String name, unsigned long dueDate, void job (), bool completionCondition ()) {
+void addTask(String name, unsigned long dueDate, void job(), bool completionCondition())
+{
   struct Task task = {name, dueDate, false, job, completionCondition};
   tasks.push(task);
 }
 
-void stepperDir(String dir = "right") {
-  if (dir == "right") {
-    digitalWrite(dirPin,HIGH);
-    } else {
-      digitalWrite(dirPin,LOW);
-      }
+void stepperDir(String dir = "right")
+{
+  if (dir == "right")
+  {
+    digitalWrite(dirPin, HIGH);
   }
+  else
+  {
+    digitalWrite(dirPin, LOW);
+  }
+}
 
-void wifiConnect() {
+void wifiConnect()
+{
   Serial.println("Connecting to: ");
   Serial.println(wifiSsid);
   Serial.println(wifiPassword);
   WiFi.begin(wifiSsid, wifiPassword);
   unsigned long currentMillis = millis();
-  
-  while (WiFi.status() != WL_CONNECTED) {
+
+  while (WiFi.status() != WL_CONNECTED)
+  {
     Serial.print('.');
     delay(1000);
-    if (currentMillis > wifiConnectionTimeout) {
+    if (currentMillis > wifiConnectionTimeout)
+    {
       return;
-      }
+    }
   }
-
 
   localIp = WiFi.localIP();
   Serial.println(localIp);
-  }
+}
 
-void checkWifi() {
+void checkWifi()
+{
   unsigned long currentMillis = millis();
-  
-  if ((WiFi.status() != WL_CONNECTED) && (currentMillis - wifiCheckLock >= wifiCheckInterval)) {
+
+  if ((WiFi.status() != WL_CONNECTED) && (currentMillis - wifiCheckLock >= wifiCheckInterval))
+  {
     Serial.println("Reconnecting to WiFi...");
     WiFi.disconnect();
     WiFi.reconnect();
     wifiCheckLock = currentMillis;
     localIp = WiFi.localIP();
     Serial.println(localIp);
-    }
   }
+}
 
-void startHoming() {
+void startHoming()
+{
   bottomHoming = true;
   runHoming = true;
-  }
+}
 
-void setHoming(String side) {
-  long newPosition = 3000L;
+void setHoming(String side)
+{
+  long newPosition = 500000;
   int pin = topLimitPin;
-  
-  if (side == "bottom") {
-    newPosition = -3000;
+
+  if (side == "bottom")
+  {
+    newPosition = -500000;
     pin = bottomLimitPin;
   }
 
   stepper.setTargetPositionInSteps(newPosition);
-  }
+}
 
-void openTo(int openPercentage) {
-  stepper.setTargetPositionInSteps(stepperLocationFromOpening(openPercentage));
-  
+void openTo(int openPercentage)
+{
+  long newLocation = stepperLocationFromOpening(openPercentage);
+  long curLocation = stepper.getCurrentPositionInSteps();
+
+  Serial.println("Cur location: ");
+  Serial.println(curLocation);
+  Serial.println("Opening to: ");
+  Serial.println(openPercentage);
+  Serial.println("New location:");
+  Serial.println(newLocation);
+
+  stepper.setTargetPositionInSteps(newLocation);
+
   currentOpenValue = openPercentage;
-  }
+}
 
-long stepperLocationFromOpening(int openPercentage) {
-  return (long) openPercentage * stepperMaxPos / 100;
-  }
+long stepperLocationFromOpening(int openPercentage)
+{
+  return (long)openPercentage * stepperMaxPos / 100;
+}
 
-void fullOpen() {
+void fullOpen()
+{
   openTo(100);
-  }
+}
 
-void fullClose() {
+void fullClose()
+{
   openTo(0);
-  }
+}
 
-void stepUp() {
+void stepUp()
+{
   int newOpenValue;
   const int rest = currentOpenValue % stepValue;
 
-  if (rest != 0) {
-      newOpenValue = currentOpenValue + (stepValue - rest);
-    } else {
-      newOpenValue = currentOpenValue + 10;
-    }
-  
-  if (newOpenValue > 100) {
+  if (rest != 0)
+  {
+    newOpenValue = currentOpenValue + (stepValue - rest);
+  }
+  else
+  {
+    newOpenValue = currentOpenValue + 10;
+  }
+
+  if (newOpenValue > 100)
+  {
     newOpenValue = 100;
   }
 
   openTo(newOpenValue);
 }
 
-void stepDown() {
+void stepDown()
+{
   int newOpenValue;
   const int rest = currentOpenValue % stepValue;
 
-  if (rest != 0) {
-      newOpenValue = currentOpenValue - rest;
-    } else {
-      newOpenValue = currentOpenValue - 10;
-    }
-  
-  if (newOpenValue < 0) {
+  if (rest != 0)
+  {
+    newOpenValue = currentOpenValue - rest;
+  }
+  else
+  {
+    newOpenValue = currentOpenValue - 10;
+  }
+
+  if (newOpenValue < 0)
+  {
     newOpenValue = 0;
   }
 
   openTo(newOpenValue);
 }
 
-void performTasks() {
-  for (int i = 0; i < tasks.size(); i++) {
-    if (!tasks[i].finished && tasks[i].dueDate < millis() && tasks[i].runCondition() == true) {
+void performTasks()
+{
+  for (int i = 0; i < tasks.size(); i++)
+  {
+    if (!tasks[i].finished && tasks[i].dueDate < millis() && tasks[i].runCondition() == true)
+    {
       struct Task task = tasks.shift();
       char taskName[100];
       task.name.toCharArray(taskName, sizeof(taskName));
       displayStatus(taskName);
+      Serial.println("Starting task");
       Serial.println(task.name);
       task.job();
       task.finished = true;
-    } else {
+    }
+    else
+    {
       return;
     }
   }
 }
 
-void checkButtons() {
-  checkButton(openButton, [](unsigned long initTime) {
-    addTask("Open", initTime, []() { fullOpen(); }, []() { return isIdle(); });
-  }, &lastButtonLockTime, &openButtonState);
+void checkButtons()
+{
+  checkButton(
+      openButton, [](unsigned long initTime)
+      { addTask(
+            "Open", initTime, []()
+            { fullOpen(); },
+            []()
+            { return isIdle(); }); },
+      &lastButtonLockTime, &openButtonState, "Open");
 
-  checkButton(closeButton, [](unsigned long initTime) {
-    addTask("Close", initTime, []() { fullClose(); }, []() { return isIdle(); });
-  }, &lastButtonLockTime, &closeButtonState);
+  checkButton(
+      closeButton, [](unsigned long initTime)
+      { addTask(
+            "Close", initTime, []()
+            { fullClose(); },
+            []()
+            { return isIdle(); }); },
+      &lastButtonLockTime, &closeButtonState, "Close");
 
-  checkButton(closeButton, [](unsigned long initTime) {
-    addTask("StepUp", initTime, []() { stepUp(); }, []() { return isIdle(); });
-  }, &lastButtonLockTime, &stepUpButtonState);
+  checkButton(
+      stepUpButton, [](unsigned long initTime)
+      { addTask(
+            "StepUp", initTime, []()
+            { stepUp(); },
+            []()
+            { return isIdle(); }); },
+      &lastButtonLockTime, &stepUpButtonState, "StepUp");
 
-  checkButton(closeButton, [](unsigned long initTime) {
-    addTask("StepDown", initTime, []() { stepDown(); }, []() { return isIdle(); });
-  }, &lastButtonLockTime, &stepDownButtonState);
+  checkButton(
+      stepDownButton, [](unsigned long initTime)
+      { addTask(
+            "StepDown", initTime, []()
+            { stepDown(); },
+            []()
+            { return isIdle(); }); },
+      &lastButtonLockTime, &stepDownButtonState, "StepDown");
+
+  checkButton(
+      actionButton, [](unsigned long initTime)
+      { addTask(
+            "Action: not implemented", initTime, []()
+            { stepDown(); },
+            []()
+            { return isIdle(); }); },
+      &lastButtonLockTime, &stepDownButtonState, "Not implemented");
 }
 
-void checkButton(int buttonPin, void handler (unsigned long initTime), unsigned long* lastLock, int* buttonState) {
+void checkButton(int buttonPin, void handler(unsigned long initTime), unsigned long *lastLock, int *buttonState, String message)
+{
   int reading = digitalRead(buttonPin);
-  
+
   unsigned long now = millis();
 
-  if ((now - *lastLock) < buttonLockTime) {
+  if ((now - *lastLock) < buttonLockTime)
+  {
     return;
   }
 
@@ -489,94 +652,129 @@ void checkButton(int buttonPin, void handler (unsigned long initTime), unsigned 
   //    lastDebounceTime = now;
   //    }
 
-  if ((now - lastDebounceTime) > debounceDelay) {
-    if (reading != *buttonState) {
+  if ((now - lastDebounceTime) > debounceDelay)
+  {
+    if (reading != *buttonState)
+    {
+      Serial.println("Got button readout for: " + message);
       *buttonState = reading;
-      if (*buttonState == HIGH) {
+      if (*buttonState == LOW)
+      {
         handler(now);
       }
-    }
 
-    *lastLock = now;
+      *lastLock = now;
+    }
   }
 }
 
-bool isIdle() {
+bool isIdle()
+{
   return stepper.getDistanceToTargetSigned() == 0 && !topHoming && !bottomHoming;
-  }
+}
 
-void checkLimits() {
+void checkLimits()
+{
   long currentPos = stepper.getCurrentPositionInSteps();
   long targetPos = stepper.getTargetPositionInSteps();
-  
-  if ((currentPos == stepperMaxPos && digitalRead(topLimitPin) && targetPos > currentPos) || (currentPos == 0 && digitalRead(bottomLimitPin) && targetPos < currentPos)) {
+
+  if ((currentPos == stepperMaxPos && digitalRead(topLimitPin) == LOW && targetPos > currentPos) || (currentPos == 0 && digitalRead(bottomLimitPin) == LOW && targetPos < currentPos))
+  {
     Serial.println("LimitHit");
     stepper.setCurrentPositionInSteps(currentPos);
     stepper.setTargetPositionInSteps(currentPos);
     delay(200);
     stepperOff();
-    }
+  }
 }
 
-void checkStepper() {
-  digitalWrite(stepperEnPin, stepperState == LOW ? HIGH : LOW);
-  }
+void debugLimits()
+{
+  Serial.println(digitalRead(topLimitPin));
+  //  Serial.println(digitalRead(bottomLimitPin));
+}
 
-void runStepper() {
-  if (stepper.getDistanceToTargetSigned() != 0) {
-  if (stepperState == LOW) {
+void checkStepper()
+{
+  digitalWrite(stepperEnPin, stepperState == LOW ? HIGH : LOW);
+}
+
+void runStepper()
+{
+  if (!stepper.motionComplete())
+  {
+    //    Serial.println(stepper.getDistanceToTargetSigned());
+    if (stepperState == LOW)
+    {
       stepperOn();
       delay(500);
     }
-  
-  if (topHoming) {
-    if (digitalRead(topLimitPin) == HIGH) {
-      topHoming = false;
-      stepperMaxPos = stepper.getCurrentPositionInSteps();
-      stepper.hardStop();
-     
-      return;
+
+    if (topHoming)
+    {
+      if (digitalRead(topLimitPin) == LOW)
+      {
+        topHoming = false;
+        runHoming = false;
+        stepperMaxPos = stepper.getCurrentPositionInSteps();
+        stepper.setTargetPositionInSteps(stepperMaxPos);
+        Serial.println("New stepper max pos:");
+        Serial.println(stepperMaxPos);
+        stepper.hardStop();
       }
     }
 
-  if (bottomHoming) {
-    if (digitalRead(bottomLimitPin) == HIGH) {
-      Serial.println("Stop bottom!");
-      stepper.setCurrentPositionAsHomeAndStop();
-      bottomHoming = false;
-      runHoming = true;
-      topHoming = true;
-      
-      return;
-      }    
+    if (bottomHoming)
+    {
+      if (digitalRead(bottomLimitPin) == LOW)
+      {
+        Serial.println("Stop bottom!");
+        stepper.setCurrentPositionAsHomeAndStop();
+        bottomHoming = false;
+        runHoming = true;
+        topHoming = true;
+
+        //        return;
+      }
     }
-    stepper.processMovement();
-    stepperCurrentPos = stepper.getCurrentPositionInSteps();
-  } else {
+
+    if (stepper.processMovement())
+    {
+      stepperCurrentPos = stepper.getCurrentPositionInSteps();
+      stepper.setTargetPositionInSteps(stepperCurrentPos);
+      displayStatus("Finished moving");
+      delay(500);
+      stepperOff();
+    }
+  }
+  else
+  {
     stepperOff();
-    Serial.println("Turning Off");
-    }
+  }
 }
 
-//int potToPercentage(int potValue) {
-//  int value = (potValue - potentiometerMin);
-//  
-//  return value > 0 ? value * potentiometerStep : 0;
-//  }
+// int potToPercentage(int potValue) {
+//   int value = (potValue - potentiometerMin);
+//
+//   return value > 0 ? value * potentiometerStep : 0;
+//   }
 
 // File System and SD card reader
 
-void restoreSettingsFromEEPROM() {
+void restoreSettingsFromEEPROM()
+{
   readStringFromEEPROM(ssidEEPROMIndex, &wifiSsid);
   readStringFromEEPROM(passwordEEPROMIndex, &wifiPassword);
-  }
+}
 
-void saveSettingsToEEPROM() {
+void saveSettingsToEEPROM()
+{
   writeStringToEEPROM(ssidEEPROMIndex, wifiSsid);
   writeStringToEEPROM(passwordEEPROMIndex, wifiPassword);
 }
 
-void writeStringToEEPROM(int addrOffset, const String &strToWrite) {
+void writeStringToEEPROM(int addrOffset, const String &strToWrite)
+{
   byte len = strToWrite.length();
   EEPROM.write(addrOffset, len);
   for (int i = 0; i < len; i++)
@@ -585,9 +783,10 @@ void writeStringToEEPROM(int addrOffset, const String &strToWrite) {
   }
 }
 
-void readStringFromEEPROM(int addrOffset, char (*buf)[100]) {
+void readStringFromEEPROM(int addrOffset, char (*buf)[100])
+{
   int newStrLen = EEPROM.read(addrOffset);
-  
+
   for (int i = 0; i < newStrLen; i++)
   {
     *buf[i] = EEPROM.read(addrOffset + 1 + i);
@@ -595,96 +794,114 @@ void readStringFromEEPROM(int addrOffset, char (*buf)[100]) {
   *buf[newStrLen] = '\0';
 }
 
-bool getWifiConfigFromSD() {
-  if(!SD.begin(SDCardReaderPin)){
+bool getWifiConfigFromSD()
+{
+  if (!SD.begin(SDCardReaderPin))
+  {
     Serial.println("Card Mount Failed");
     return false;
   }
 
   uint8_t cardType = SD.cardType();
 
-  if(cardType == CARD_NONE){
+  if (cardType == CARD_NONE)
+  {
     Serial.println("No SD card attached");
     return false;
   }
 
   readFile(SD, wifiConfigFile, &fileContents);
-  
-  if (fileContents[0] == '\0') {
-    return false;
-    }
 
-  return scanStringAndSetConfig(fileContents);
+  if (fileContents[0] == '\0')
+  {
+    return false;
   }
 
-bool scanStringAndSetConfig(String content) {
+  return scanStringAndSetConfig(fileContents);
+}
+
+bool scanStringAndSetConfig(String content)
+{
   MatchState ms;
-  char ssidRegex [100] = "ssid=([A-Za-z0-9_@.\\/#&+-]*)";
-  char passwordRegex [100] = "password=([A-Za-z0-9_@.\\/#&+-]*)";
+  char ssidRegex[100] = "ssid=([A-Za-z0-9_@.\\/#&+-]*)";
+  char passwordRegex[100] = "password=([A-Za-z0-9_@.\\/#&+-]*)";
   char buf[1024];
 
   content.toCharArray(buf, sizeof(buf));
   ms.Target(buf);
 
-  if (ms.Match(ssidRegex) == REGEXP_NOMATCH) {
+  if (ms.Match(ssidRegex) == REGEXP_NOMATCH)
+  {
     Serial.println("No match for ssid");
     Serial.println(content);
     return false;
-    }
-  
-  ms.GetCapture (wifiSsid, 0);
-
-  if (ms.Match(passwordRegex) == REGEXP_NOMATCH) {
-    Serial.println("No match for password");
-    return false;
-    }
-
-  ms.GetCapture (wifiPassword, 0);    
-
-  return true;
   }
 
-void readFile(fs::FS &fs, const char * path, String* contents){
+  ms.GetCapture(wifiSsid, 0);
+
+  if (ms.Match(passwordRegex) == REGEXP_NOMATCH)
+  {
+    Serial.println("No match for password");
+    return false;
+  }
+
+  ms.GetCapture(wifiPassword, 0);
+
+  return true;
+}
+
+void readFile(fs::FS &fs, const char *path, String *contents)
+{
   Serial.printf("Reading file: %s\n", path);
-  
+
   File file = fs.open(path);
-  if(!file){
+  if (!file)
+  {
     Serial.println("Failed to open file for reading");
     return;
   }
 
   memset(contents, '\0', sizeof(contents));
-  
+
   Serial.print("Read from file: ");
-  while(file.available()) {
+  while (file.available())
+  {
     char currentChar = file.read();
     *contents += currentChar;
   }
   file.close();
 }
 
-void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
+void listDir(fs::FS &fs, const char *dirname, uint8_t levels)
+{
   Serial.printf("Listing directory: %s\n", dirname);
 
   File root = fs.open(dirname);
-  if(!root){
+  if (!root)
+  {
     Serial.println("Failed to open directory");
     return;
   }
-  if(!root.isDirectory()){
+  if (!root.isDirectory())
+  {
     Serial.println("Not a directory");
     return;
   }
 
   File file = root.openNextFile();
-  while(file){
-    if(file.isDirectory()){
+  while (file)
+  {
+    if (file.isDirectory())
+    {
       Serial.print("  DIR : ");
       Serial.println(file.name());
-      if(levels){
-        listDir(fs, file.name(), levels -1);
+      if (levels)
+      {
+        listDir(fs, file.name(), levels - 1);
       }
-    } else {
+    }
+    else
+    {
       Serial.print("  FILE: ");
       Serial.print(file.name());
       Serial.print("  SIZE: ");
@@ -694,52 +911,65 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
   }
 }
 
-void renameFile(fs::FS &fs, const char * path1, const char * path2){
+void renameFile(fs::FS &fs, const char *path1, const char *path2)
+{
   Serial.printf("Renaming file %s to %s\n", path1, path2);
-  if (fs.rename(path1, path2)) {
+  if (fs.rename(path1, path2))
+  {
     Serial.println("File renamed");
-  } else {
+  }
+  else
+  {
     Serial.println("Rename failed");
   }
 }
 
-void deleteFile(fs::FS &fs, const char * path){
+void deleteFile(fs::FS &fs, const char *path)
+{
   Serial.printf("Deleting file: %s\n", path);
-  if(fs.remove(path)){
+  if (fs.remove(path))
+  {
     Serial.println("File deleted");
-  } else {
+  }
+  else
+  {
     Serial.println("Delete failed");
   }
 }
 
-void checkHoming() {
-  if (topHoming && runHoming) {
+void checkHoming()
+{
+  if (topHoming && runHoming)
+  {
     setHoming("top");
     runHoming = false;
-    }
-
-  if (bottomHoming && runHoming) {
-    setHoming("bottom");
-    runHoming = false;
-    }
   }
 
-//void checkPotentiometer() {
-//  int newRead = analogRead(potentiometerAnalogPin);
-//  
-//  if (newRead < (potentiometerValue+potentiometerOffset) || newRead > (potentiometerValue+potentiometerOffset)) {
-//    potentiometerValue = newRead;
-//    addTask("Open [potentiometer]", (millis()), []() { openTo(potToPercentage(potentiometerValue)); }, []() { return isIdle(); });
-//    }
-//  }
-    
-void loop() {
+  if (bottomHoming && runHoming)
+  {
+    setHoming("bottom");
+    runHoming = false;
+  }
+}
+
+// void checkPotentiometer() {
+//   int newRead = analogRead(potentiometerAnalogPin);
+//
+//   if (newRead < (potentiometerValue+potentiometerOffset) || newRead > (potentiometerValue+potentiometerOffset)) {
+//     potentiometerValue = newRead;
+//     addTask("Open [potentiometer]", (millis()), []() { openTo(potToPercentage(potentiometerValue)); }, []() { return isIdle(); });
+//     }
+//   }
+
+void loop()
+{
   checkButtons();
   checkLimits();
-//  checkLeds();
+  //  checkLeds();
   checkStepper();
+  //  debugLimits();
   checkHoming();
-//  checkWifi();
+  //  checkWifi();
   performTasks();
   runStepper();
 }
